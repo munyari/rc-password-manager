@@ -62,18 +62,25 @@ var keychain = function() {
     priv.data.version = "CS 255 Password Manager v1.0";
     var password_bitarray = string_to_bitarray(password);
     var master_salt = random_bitarray(128);
-    priv.secrets.master_key = bitarray_slice(KDF(password_bitarray, master_salt), 0, 128);
-    keychain.master_salt = master_salt;
+    var long_key = KDF(password_bitarray, master_salt);
+    priv.secrets.master_key = bitarray_slice(long_key, 0, 128);
+    keychain.master_salt = bitarray_to_base64(master_salt);
 
     var hmac_salt = random_bitarray(128);
     priv.secrets.hmac_key = bitarray_slice(SHA256(priv.secrets.master_key), 0, 128);
-    keychain.hmac_salt = hmac_salt;
+    keychain.hmac_salt = bitarray_to_base64(hmac_salt);
 
     // our "magic keyword, important later
-    keychain.magic = enc_gcm(setup_cipher(priv.secrets.master_key),
-        string_to_bitarray("Recurse"));
+    keychain.magic = bitarray_to_base64(
+        enc_gcm(setup_cipher(priv.secrets.master_key),
+                string_to_bitarray("Recurse"))
+        );
     ready = true;
   };
+
+  keychain.custom = function() {
+    console.log("This worked!");
+  }
 
   /**
    * Loads the keychain state from the provided representation (repr). The
@@ -100,9 +107,9 @@ var keychain = function() {
     else {
       var new_keychain = JSON.parse(repr);
       var password_key = bitarray_slice(
-          KDF(string_to_bitarray(password), new_keychain.master_salt), 0, 128
+          KDF(string_to_bitarray(password), base64_to_bitarray(new_keychain.master_salt)), 0, 128
           );
-      if (bitarray_to_string(dec_gcm(setup_cipher(password_key), new_keychain.magic)) === "Recurse")
+      if (bitarray_to_string(dec_gcm(setup_cipher(password_key), base64_to_bitarray(new_keychain.magic))) === "Recurse")
       {
         keychain = new_keychain;
         keychain.priv = {secrets: {}, data: {}};
@@ -154,7 +161,7 @@ var keychain = function() {
       // i already have salts and password key
       var hmac_salt = random_bitarray(128);
       priv.secrets.hmac_key = bitarray_slice(SHA256(keychain.priv.secrets.master_key), 0, 128);
-      keychain.hmac_salt = hmac_salt;
+      keychain.hmac_salt = bitarray_to_base64(hmac_salt);
 
     }
     var name_digest = bitarray_to_base64(HMAC(priv.secrets.hmac_key, name));
