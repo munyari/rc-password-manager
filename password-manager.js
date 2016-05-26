@@ -51,13 +51,13 @@ var keychain = function() {
   var keychain = {};
 
   /**
-    * Creates an empty keychain with the given password. Once init is called,
-    * the password manager should be in a ready state.
-    *
-    * Arguments:
-    *   password: string
-    * Return Type: void
-    */
+   * Creates an empty keychain with the given password. Once init is called,
+   * the password manager should be in a ready state.
+   *
+   * Arguments:
+   *   password: string
+   * Return Type: void
+   */
   keychain.init = function(password) {
     priv.data.version = "CS 255 Password Manager v1.0";
     var password_bitarray = string_to_bitarray(password);
@@ -98,13 +98,21 @@ var keychain = function() {
         bitarray_to_base64(SHA256(store)) != trusted_data_check)
       throw "SHA-256 validation failed!";
     else {
+      var new_keychain = JSON.parse(repr);
       var password_key = bitarray_slice(
-            KDF(string_to_bitarray(password), keychain.master_salt), 0, 128
-            );
-      if (dec_gcm(password_key, keychain.get("magic")) === "Recurse")
+          KDF(string_to_bitarray(password), new_keychain.master_salt), 0, 128
+          );
+      if (bitarray_to_string(dec_gcm(setup_cipher(password_key), new_keychain.magic)) === "Recurse")
+      {
+        keychain = new_keychain;
+        keychain.priv = {secrets: {}, data: {}};
+        keychain.priv.secrets.master_key = password_key;
         ready = true;
+      }
       else
+      {
         ready = false;
+      }
       return ready;
     }
   };
@@ -141,11 +149,19 @@ var keychain = function() {
   keychain.get = function(name) {
     if (!ready)
       throw "Keychain not initialized.";
-    var name_digest = HMAC(priv.secrets.hmac_key, name);
+    if (priv.secrets.hmac_key === undefined)
+    {
+      // i already have salts and password key
+      var hmac_salt = random_bitarray(128);
+      priv.secrets.hmac_key = bitarray_slice(SHA256(keychain.priv.secrets.master_key), 0, 128);
+      keychain.hmac_salt = hmac_salt;
+
+    }
+    var name_digest = bitarray_to_base64(HMAC(priv.secrets.hmac_key, name));
     if (keychain[name_digest])
     {
       var plaintext = dec_gcm(setup_cipher(priv.secrets.master_key),
-          keychain[name_digest]);
+          base64_to_bitarray(keychain[name_digest]));
       return bitarray_to_string(plaintext);
     }
     else
@@ -166,9 +182,9 @@ var keychain = function() {
   keychain.set = function(name, value) {
     if (!ready)
       throw "Keychain not initialized.";
-    var name_digest = HMAC(priv.secrets.hmac_key, name);
-    var enc_val = enc_gcm(setup_cipher(priv.secrets.master_key),
-        string_to_bitarray(value));
+    var name_digest = bitarray_to_base64(HMAC(priv.secrets.hmac_key, name));
+    var enc_val = bitarray_to_base64(enc_gcm(setup_cipher(priv.secrets.master_key),
+          string_to_bitarray(value)));
     keychain[name_digest] = enc_val;
   };
 
@@ -184,7 +200,7 @@ var keychain = function() {
   keychain.remove = function(name) {
     if (!ready)
       throw "Keychain not initialized.";
-    var name_digest = HMAC(priv.secrets.hmac_key, name);
+    var name_digest = bitarray_to_base64(HMAC(priv.secrets.hmac_key, name));
     if (keychain[name_digest]) {
       delete keychain[name_digest];
       return true;
