@@ -47,9 +47,11 @@ console.log("Loading database");
 var new_keychain = password_manager.keychain();
 new_keychain.load(password, contents, cksum);
 
-// console.log("Checking contents of new database");
-// for (var k in kvs) {
-//   assert(keychain.get(k) === new_keychain.get(k));
-// }
+console.log("\n");
+console.log(keychain);
+console.log("Checking contents of new database");
+for (var k in kvs) {
+  assert(keychain.get(k) === new_keychain.get(k));
+}
 
 console.log("All tests passed!");

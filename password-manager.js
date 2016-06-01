@@ -67,20 +67,19 @@ var keychain = function() {
     keychain.master_salt = bitarray_to_base64(master_salt);
 
     var hmac_salt = random_bitarray(128);
-    priv.secrets.hmac_key = bitarray_slice(SHA256(priv.secrets.master_key), 0, 128);
+    priv.secrets.hmac_key = bitarray_slice(
+        SHA256(priv.secrets.master_key), 0, 128
+        );
     keychain.hmac_salt = bitarray_to_base64(hmac_salt);
 
     // our "magic keyword, important later
     keychain.magic = bitarray_to_base64(
         enc_gcm(setup_cipher(priv.secrets.master_key),
-                string_to_bitarray("Recurse"))
+          string_to_bitarray("Recurse"))
         );
     ready = true;
   };
 
-  keychain.custom = function() {
-    console.log("This worked!");
-  }
 
   /**
    * Loads the keychain state from the provided representation (repr). The
@@ -107,13 +106,22 @@ var keychain = function() {
     else {
       var new_keychain = JSON.parse(repr);
       var password_key = bitarray_slice(
-          KDF(string_to_bitarray(password), base64_to_bitarray(new_keychain.master_salt)), 0, 128
+          KDF(string_to_bitarray(password),
+            base64_to_bitarray(new_keychain.master_salt)), 0, 128
           );
-      if (bitarray_to_string(dec_gcm(setup_cipher(password_key), base64_to_bitarray(new_keychain.magic))) === "Recurse")
+      var plaintext = bitarray_to_string(
+          dec_gcm(setup_cipher(password_key),
+            base64_to_bitarray(new_keychain.magic))
+          );
+      if (plaintext === "Recurse")
       {
+        priv.secrets.master_key = password_key;
+
+        priv.secrets.hmac_key = bitarray_slice(
+            SHA256(priv.secrets.master_key), 0, 128
+            );
         keychain = new_keychain;
-        keychain.priv = {secrets: {}, data: {}};
-        keychain.priv.secrets.master_key = password_key;
+
         ready = true;
       }
       else
